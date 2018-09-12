@@ -1,0 +1,37 @@
+{
+	"description": "STM32F411",
+	"components": [
+		{
+			"name": "stm32f411",
+			"id": 0,
+			"type": "MCU",
+			"class": "Stm32f4"
+		},
+		{
+			"name": "MCP23S08",
+			"id": 1,
+			"type": "Peripheral",
+			"file": "../build/_build/MCP23S08.so",
+			"config": {
+				"pins": {
+					"cs": 9,
+					"sck": 5,
+					"si": 7,
+					"so": 6,
+					"INT": 1,
+					"RESET": 30,
+					"A0": 31,
+					"A1": 30,
+					"M0": 0,
+					"M1": 12,
+					"M2": 13,
+					"M3": 14,
+					"M4": 15,
+					"M5": 16,
+					"M6": 17,
+					"M7": 18
+				}
+			}
+		}
+	]
+}

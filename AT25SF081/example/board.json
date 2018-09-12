@@ -1,0 +1,27 @@
+{
+	"description": "Nrf52-DK",
+	"components": [
+		{
+			"name": "nrf52832",
+			"id": 0,
+			"type": "MCU",
+			"class": "Nrf52832"
+		},
+		{
+			"name": "AT25SF081",
+			"id": 2,
+			"type": "Peripheral",
+			"file": "../build/_build/AT25SF081.so",
+			"config": {
+				"pins": {
+					"wp": 14,
+					"cs": 15,
+					"sck": 0,
+					"si": 21,
+					"so": 1,
+					"hold": 10
+				}
+			}
+		}
+	]
+}

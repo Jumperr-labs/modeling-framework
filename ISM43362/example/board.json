@@ -1,0 +1,30 @@
+{
+	"description": "STM32l475",
+	"components": [
+		{
+			"name": "stm32l475",
+			"id": 0,
+			"type": "MCU",
+            "class": "Stm32l4"
+		},
+		{
+			"name": "ISM43362",
+			"id": 1,
+			"type": "Peripheral",
+			"file": "../build/_build/ISM43362.so",
+			"config": {
+				"pins": {
+                    "cs": "E0",
+					"sck": "C10",
+					"so": "C11",
+					"si": "C12",
+					"RESET": "E8",
+					"EXTI1": "E1",
+					"WAKEUP": "B13",
+					"UART3_TX": "D8",
+                    "UART3_RX": "D9"
+				}
+			}
+		}
+	]
+}

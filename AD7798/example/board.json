@@ -1,0 +1,28 @@
+{
+	"description": "Stm32l4",
+	"components": [
+		{
+			"name": "stm32l476",
+			"id": 0,
+			"type": "MCU",
+			"class": "Stm32l476"		
+		},
+		{
+			"name": "AD7798",
+			"id": 2,
+			"type": "Peripheral",
+			"file": "../build/_build/AD7798.so",
+			"config": {
+				"pins": {
+					"cs": 9,
+					"sck": 5,
+					"si": 7,
+					"so": 6
+				},
+				"generators": {
+					"conversion": 1
+				}
+			}
+		}
+	]
+}
