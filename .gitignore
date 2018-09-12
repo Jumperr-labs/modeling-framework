@@ -104,3 +104,5 @@ jemu/.vs/
 *_build/
 
 *.jumper
+
+*.DS_Store

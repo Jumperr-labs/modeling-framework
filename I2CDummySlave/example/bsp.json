@@ -1,0 +1,23 @@
+{
+	"description": "STM-DK",
+	"components": [
+		{
+			"name": "stm32f411",
+			"id": 0,
+			"type": "MCU",
+			"class": "Stm32f4"
+		},
+		{
+			"name": "I2CDummySlave",
+			"id": 1,
+			"type": "Peripheral",
+			"file": "../build/_build/I2CDummySlave.so",
+			"config": {
+				"pins": {
+					"sda": 25,
+					"scl": 27
+				}
+			}
+		}
+	]
+}
