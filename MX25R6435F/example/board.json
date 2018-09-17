@@ -1,0 +1,25 @@
+{
+	"description": "MX25R6435F",
+	"components": [
+		{
+			"name": "nrf52832",
+			"id": 0,
+			"type": "MCU",
+			"class": "Nrf52832"
+		},
+		{
+			"name": "MX25R6435F",
+			"id": 1,
+			"type": "Peripheral",
+			"file": "../build/_build/MX25R6435F.so",
+			"config": {
+				"pins": {
+					"sck": 3,
+					"si": 4,
+					"so": 28,
+					"cs": 29
+				}
+			}
+		}
+	]
+}

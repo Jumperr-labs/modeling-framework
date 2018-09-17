@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <functional>
+#include "json.hpp"
 #include "iSpiSlave.h"
 #include "iI2cSlave.h"
 #include "iShort.h"
@@ -160,6 +161,7 @@ class ExternalPeripheral {
   public:
     virtual void Main() = 0;
     virtual void Stop() = 0;
+    virtual nlohmann::json DoCommand(const nlohmann::json &command) { return {}; };
 };
 
 typedef ExternalPeripheral* peripheral_factory_t();
