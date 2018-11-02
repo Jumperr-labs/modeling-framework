@@ -5,7 +5,7 @@
 			"name": "stm32l475",
 			"id": 0,
 			"type": "MCU",
-            "class": "Stm32l4"
+            		"class": "Stm32l475"
 		},
 		{
 			"name": "ISM43362",
