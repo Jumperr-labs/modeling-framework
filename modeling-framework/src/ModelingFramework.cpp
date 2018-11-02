@@ -2,9 +2,9 @@
 #include <cassert>
 #include <utility>
 #include <unordered_map>
-#include "iJemuInterface.h"
 #include <iostream>
 #include <memory>
+#include "iJemuInterface.h"
 
 iJemuInterface *jemu_interface_ = nullptr;
 
@@ -24,11 +24,21 @@ iSpiSlave* CreateSpiSlave(SpiSlaveConfig &spi_config) {
     return jemu_interface_->CreateSpiSlave(spi_config);
 }
 
+
+iUartDevice* CreateUartDevice(UartConfig &uart_config) {
+    assert(jemu_interface_);
+    return jemu_interface_->CreateUartDevice(uart_config);
+}
+
 iI2cSlave* CreateI2cSlave() {
     assert(jemu_interface_);
     return jemu_interface_->CreateI2cSlave();
 }
 
+iWifiManager* CreateWifiManager() {
+    assert(jemu_interface_);
+    return jemu_interface_->CreateWifiManager();
+}
 iShort* CreateShort() {
     assert(jemu_interface_);
     return jemu_interface_->CreateShort();
@@ -79,6 +89,11 @@ uint8_t GetNextUInt8FromDataGenerator(std::string name) {
 double GetCachedValueFromDataGenerator(std::string name) {
     assert(jemu_interface_);
     return jemu_interface_->GetCachedValueFromDataGenerator(name.c_str());
+}
+
+bool HasDataGenerator(std::string name) {
+    assert(jemu_interface_);
+    return jemu_interface_->HasDataGenerator(name.c_str());
 }
 
 void TimedCallback (int id) {
@@ -142,4 +157,43 @@ int SetPinChangeLevelEventCallback(uint32_t pin_id, const pin_change_level_callb
 
 int SetPinChangeLevelEventCallback(const std::string &pin_name, const pin_change_level_callback_t &callback) {
     return SetPinChangeLevelEventCallback( (uint32_t) GetPinNumber(pin_name) ,callback);
+}
+
+int TcpSocketCreate() {
+    assert(jemu_interface_);
+    return jemu_interface_->TcpSocketCreate();
+}
+
+int TcpSocketConnect(int fd, const sockaddr_in *address, bool is_ssl, std::string ca_cert, std::string client_cert, std::string client_key) {
+    assert(jemu_interface_);
+    return jemu_interface_->TcpSocketConnect(fd, address, is_ssl, ca_cert.c_str(), client_cert.c_str(), client_key.c_str());
+}
+
+int TcpSocketRecv(int fd, void* buffer, size_t size) {
+    assert(jemu_interface_);
+    return jemu_interface_->TcpSocketRecv(fd, buffer, size);
+}
+
+int TcpSocketSend(int fd, void* buffer, size_t size) {
+    assert(jemu_interface_);
+    return jemu_interface_->TcpSocketSend(fd, buffer, size);
+}
+
+bool DnsResolve(const char* hostname, struct in_addr *ip) {
+    assert(jemu_interface_);
+    return jemu_interface_->DnsResolve(hostname, ip);
+}
+
+int SocketClose(int fd) {
+    assert(jemu_interface_);
+    return jemu_interface_->SocketClose(fd);
+}
+
+void SetSocketSendTimeout(int fd, int s, int us) {
+    assert(jemu_interface_);
+    return jemu_interface_->SetSocketSendTimeout(fd, s, us);
+}
+void SetSocketRecvTimeout(int fd, int s, int us) {
+    assert(jemu_interface_);
+    return jemu_interface_->SetSocketRecvTimeout(fd, s, us);
 }

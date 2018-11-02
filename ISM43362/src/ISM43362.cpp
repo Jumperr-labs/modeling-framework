@@ -1,8 +1,38 @@
 #include "ISM43362.h"
+#include <netinet/in.h>
 #include <iostream>
+#include <cstring>
+#include <arpa/inet.h>
 
-ISM43362::ISM43362() {
+#define SPI_WRITE_OK    SpiWrite("\r\nOK\r\n> ")
+#define SPI_WRITE_ERROR    SpiWrite("\r\nERROR")
 
+#define SPI_WRITE_OK_INT(data)    SpiWrite(std::string("\r\n") + std::to_string(data) + "\r\nOK\r\n> ")
+
+using namespace std;
+
+struct AtCommand {
+    AtCommand (uint8_t* buf, int size) {
+        full_command_ = std::string((char*) buf, size );
+        command_ = full_command_.substr(0, full_command_.find('\r'));
+
+        right_ = left_ = command_;
+
+        auto it = command_.find('=');
+
+        if (it != std::string::npos) {
+            right_ = command_.substr(it + 1, command_.size() - it);
+            left_ = command_.substr(0, it);
+        }
+    }
+    std::string full_command_{};
+    std::string command_{};
+    std::string right_{};
+    std::string left_{};
+};
+
+
+ISM43362::ISM43362() : id_2_socket_data_(10), ssl_certificates_(3) {
     SpiSlaveConfig spi_config;
 
     spi_config.mosi_pin_number = GetPinNumber("si");
@@ -14,397 +44,32 @@ ISM43362::ISM43362() {
     spi_config.bit_order = MSB_FIRST;
 
     spi_slave_ = CreateSpiSlave(spi_config);
-    InitializePins();
+
+    SetPinChangeLevelEventCallback(GetPinNumber("WAKEUP"), std::bind(&ISM43362::OnPinChangeLevelEvent,this,std::placeholders::_1, "WAKEUP"));
+    SetPinChangeLevelEventCallback(GetPinNumber("RESET"), std::bind(&ISM43362::OnPinChangeLevelEvent,this,std::placeholders::_1, "RESET"));
+    SetPinChangeLevelEventCallback(GetPinNumber("EXTI1"), std::bind(&ISM43362::OnPinChangeLevelEvent,this,std::placeholders::_1, "EXTI1"));
+    SetPinChangeLevelEventCallback(GetPinNumber("UART3_TX"), std::bind(&ISM43362::OnPinChangeLevelEvent,this,std::placeholders::_1,"UART3_TX"));
+    SetPinChangeLevelEventCallback(GetPinNumber("UART3_RX"), std::bind(&ISM43362::OnPinChangeLevelEvent,this,std::placeholders::_1,"UART3_RX"));
+
     Reset();
 }
 
-void ISM43362::InitializePins() {
-   SetPinChangeLevelEventCallback(GetPinNumber("WAKEUP"), std::bind(&ISM43362::OnPinChangeLevelEvent,this,std::placeholders::_1, "WAKEUP"));
-   SetPinChangeLevelEventCallback(GetPinNumber("RESET"), std::bind(&ISM43362::OnPinChangeLevelEvent,this,std::placeholders::_1, "RESET"));
-   SetPinChangeLevelEventCallback(GetPinNumber("EXTI1"), std::bind(&ISM43362::OnPinChangeLevelEvent,this,std::placeholders::_1, "EXTI1"));
-   SetPinChangeLevelEventCallback(GetPinNumber("UART3_TX"), std::bind(&ISM43362::OnPinChangeLevelEvent,this,std::placeholders::_1,"UART3_TX"));
-   SetPinChangeLevelEventCallback(GetPinNumber("UART3_RX"), std::bind(&ISM43362::OnPinChangeLevelEvent,this,std::placeholders::_1,"UART3_RX"));
+void ISM43362::SpiWriteCommandAndOk(std::string data) {
+    SpiWrite(std::string("\r\n") + data + "\r\nOK\r\n> ");
 }
 
 void ISM43362::OnPinChangeLevelEvent(std::vector<WireLogicLevelEvent>& notifications, std::string pin_name) {
     WireLogicLevelEvent notification = notifications[0];
 
-    std::cout << "ISM43362::OnPinChangeLevelEvent: " << pin_name << (notification.type == FALLING ? 1 : 0) << std::endl;
+    // std::cout << "ISM43362::OnPinChangeLevelEvent: " << pin_name << " : " << notification.type << std::endl;
 
-    if(pin_name == "RESET") { 
+    if (pin_name == "RESET") {
         reset_done_ += notification.type == FALLING ? 1 : 0; 
     }
-        
 }
-
-// Before throwing interrupt - read all pin levels and write them into INTCAP register
-void ISM43362::ThrowInterruprt() {
-    WriteINTCAP();
-    SetINTOn();
-}
-
-void ISM43362::SetINTOff() {
-
-    // SetPinLevel(int_, !int_active_high_);
-
-    registers_[INTF_ADDR] = 0;
-}
-
-
-void ISM43362::SetINTOn() {
-
-    // SetPinLevel(int_, int_active_high_);
-}
-
-bool ISM43362::IsInterruptEnabled(uint8_t pin_bit) {
-    return (registers_[GPINTEN_ADDR] & pin_bit) == 1;
-}
-
-bool ISM43362::IsInputPin(uint8_t pin_bit) {
-    return (registers_[IODIR_ADDR] & pin_bit) == 1;
-}
-
-bool ISM43362::IsDEFVALCompare(uint8_t pin_bit) {
-    return (registers_[INTCON_ADDR] & pin_bit) == 1;
-}
-
-// Compare between pin notification to the value of the associated bit in DEFVAL
-// If equal - return true. Else - return false.
-bool ISM43362::DEFVALEqual(uint8_t pin_bit, WireLogicLevelEvent notification) {
-    if ((((registers_[DEFVAL_ADDR] && pin_bit) != 0) && (notification.type = FALLING)) ||
-            (((registers_[DEFVAL_ADDR] && pin_bit) == 0) && (notification.type = RISING))) {
-        return false;
-    }
-
-    return true;
-}
-
-// Compare between pin notification to the previous value in the port
-// If equal - return true. Else - return false.
-bool ISM43362::LastValEqual(uint8_t pin_bit, WireLogicLevelEvent notification) {
-
-    bool gpio_on = ((registers_[GPIO_ADDR] ^ registers_[IPOL_ADDR]) & pin_bit);
-
-    if ((gpio_on && notification.type == FALLING) ||
-        (!gpio_on && notification.type == RISING)) {
-        return false;
-    }
-
-    return true;
-}
-
-
-// Get notification of pin change and update the GPIO
-void ISM43362::UpdateGPIOReg(WireLogicLevelEvent notification) {
-
-    uint8_t pin_bit = 0x01;// << pins_to_index_[notification.wire_number];
-
-    if(notification.type == RISING) {
-        if((registers_[IPOL_ADDR] & pin_bit) == 0) { // No polarity on this pin
-            registers_[GPIO_ADDR] |= pin_bit;
-        }
-        else {
-            registers_[GPIO_ADDR] &= ~pin_bit;
-        }
-    }
-    else { // FALLING
-        if((registers_[IPOL_ADDR] & pin_bit) == 0) { // No polarity on this pin
-            registers_[GPIO_ADDR] &= ~pin_bit;
-        }
-        else {
-            registers_[GPIO_ADDR] |= pin_bit;
-        }
-    }
-
-}
-
-
-// Callback for GPIO change. Should raise interrupt to master for new input, if needed.
-void ISM43362::GPIOPinChanged(std::vector<WireLogicLevelEvent>& notifications) {
-
-    std::cout << "ISM43362::GPIOPinChanged" << std::endl;
-    uint8_t pin_index = 0;
-    uint8_t interrupts = 0; // bitmask representing the interrupts of the pins
-
-    for (WireLogicLevelEvent notification : notifications) {
-
-        pin_index = 1;//pins_to_index_[notification.wire_number];
-        uint8_t pin_bit = 0x01 << pin_index;
-        // Raising interrupts only on input pins
-        if (IsInputPin(pin_bit)) {
-            UpdateGPIOReg(notification);
-
-            if (IsInterruptEnabled(pin_bit)) {
-
-                if (IsDEFVALCompare(pin_bit)) {
-                    if (!DEFVALEqual(pin_bit, notification)) {
-                        interrupts |= pin_bit;
-                    }
-                }
-
-                    // Need to compare with last value of port
-                else {
-                    if (!LastValEqual(pin_bit, notification)) {
-                        interrupts |= pin_bit;
-                    }
-                }
-            }
-        }
-
-        registers_[INTF_ADDR] |= interrupts;
-
-        if(interrupts) {
-            ThrowInterruprt();
-        }
-    }
-}
-
-
-
-uint8_t ISM43362::WaitForData() {
-
-    uint8_t byte_received = 0;
-    uint8_t data = 0;
-
-    while (byte_received == 0) {
-        byte_received =  spi_slave_->Transmit(&data, nullptr, 1);
-    }
-
-    return data;
-}
-
-void ISM43362::HandleRead() {
-
-    uint8_t address = 0;
-    uint8_t data = 0;
-    uint8_t byte_received = spi_slave_->Transmit(&address, nullptr, 1);
-
-    // Continue as long as CS is activated
-    while (byte_received != 0) {
-        bool ss_active = spi_slave_->WaitForMasterTransmit();
-
-        if(!ss_active) {
-            break;
-        }
-
-        switch (address) {
-            case GPIO_ADDR:
-                data = ReadGPIO();
-                break;
-            case INTF_ADDR:
-                data = ReadINTF();
-                break;
-            case INTCAP_ADDR:
-                data = ReadINTCAP();
-                break;
-            default:
-                data = registers_[address];
-        }
-
-        // Send the value to the master
-        byte_received = spi_slave_->Transmit(nullptr, &data, 1);
-
-        // Increment address pointer in case of sequential mode
-        if (mode_ == sequential) {
-            address = (address + 1) % 10;
-        }
-    }
-}
-
-uint8_t ISM43362::ReadINTCAP() {
-
-    uint8_t value = registers_[INTCAP_ADDR];
-    registers_[INTCAP_ADDR] = 0;
-    // Clear Output Interrupt. Should be done on GPIO read or INTCAP read
-    SetINTOff();
-
-    return value;
-}
-
-// Reads all the 8 GPIO pins and return byte represents the pins that are set
-// Each bit represents pin according to pin index
-uint8_t ISM43362::ReadPinLevels() {
-    uint8_t pin_levels = 0;
-
-    // Go over all the pins and set the relevant bit if the pin level is 1
-    for(int i = 0; i < NUMBER_OF_PINS; i++) {
-        // if(GetPinLevel(pins_[i]) == 1) {
-        //     pin_levels = pin_levels | (0x01 << i);
-        // }
-    }
-
-    return pin_levels;
-}
-
-
-// INTCAP register is read only register, and can be changed only from the hardware each time interrupt occurred
-void ISM43362::WriteINTCAP() {
-    registers_[INTCAP_ADDR] = ReadPinLevels();
-}
-
-
-// void ISM43362::SetDeviceAddress() {
-//     bool a1_high = GetPinLevel(a1_);
-//     bool a0_high = GetPinLevel(a0_);
-//     device_address_ =  (a1_high << 1) | a0_high;
-// }
-
-
-// Reading from GPIO register reads actual the port value of the input pins, and read from GPIO register the output pins
-uint8_t ISM43362::ReadGPIO() {
-
-    const uint8_t input_pins = registers_[IODIR_ADDR];
-    const uint8_t output_pins = ~input_pins;
-
-    uint8_t gpio_input_pins = (ReadPinLevels() ^ registers_[IPOL_ADDR]) & input_pins;  // XOR with polarity register and mask with input pins
-    uint8_t gpio_val = gpio_input_pins | (registers_[GPIO_ADDR] & output_pins); // Add output pins from GPIO register
-
-    // Clear Output Interrupt. Should be done on GPIO read or INTCAP read
-    SetINTOff();
-    registers_[INTCAP_ADDR] = 0;
-
-    return gpio_val;
-}
-
-uint8_t ISM43362::ReadINTF() {
-
-    uint8_t reg_val = registers_[INTF_ADDR];
-    return reg_val;
-}
-
-
-
-
-// Writing to OLAT register modifies the pins configured as output
-void ISM43362::WriteOLAT(const uint8_t data) {
-
-    // registers_[OLAT_ADDR] = data;
-
-    // // Bitmask of all the pins defined as output
-    // const uint8_t output_pins = ~registers_[IODIR_ADDR];
-
-    // uint8_t output_pin = output_pins & 0x01;
-    // // uint8_t pin_level = (data ^ registers_[IPOL_ADDR]) & 0x01;
-
-    // // Go over all the pins and set/unset their level if they defined as output pins, according to "data"
-    // for (int i = 0; i < NUMBER_OF_PINS; i++) {
-    //     // Check if the curr pin is output pin
-    //     if (output_pin) {
-    //         // SetPinLevel(pins_[i], pin_level);
-    //     }
-    //     // Go to next pin
-    //     output_pin = (output_pins >> (i + 1)) & 0x01;
-    //     pin_level = ((data ^ registers_[IPOL_ADDR]) >> (i + 1)) & 0x01;
-    // }
-}
-
-// Writing to GPIO modifies OLAT register
-void ISM43362::WriteGPIO(const uint8_t data) {
-    registers_[GPIO_ADDR] = data;
-    WriteOLAT(data);
-}
-
-// IPOL defines the polarity - each bit represents the associated pin.
-// "1" - the pin is opposite to gpio register.
-// "0" - the pin is the same as the gpio register
-void ISM43362::WriteIPOL(const uint8_t data) {
-        registers_[IPOL_ADDR] = data;
-        WriteGPIO(registers_[GPIO_ADDR]); // Write GPIO again to update the uutput pins according to the new polarity
-
-}
-
-
-void ISM43362::SwitchINT() {
-    // SetPinLevel(int_, !GetPinLevel(int_));
-}
-
-void ISM43362::WriteIOCON(const uint8_t data) {
-
-    // Handle enable hardware bit
-    if (data & HAEN_BIT) {
-        hardware_addr_enabled_ = true;
-    }
-    else {
-        hardware_addr_enabled_ = false;
-    }
-
-    // Handle sequential mode
-    if (data & SEQOP_BIT) {
-        mode_ = byte;
-    }
-    else {
-        mode_ = sequential;
-    }
-
-    // Handle polarity of INT
-    if ((registers_[IOCON_ADDR] & INTPOL_BIT) != (data & INTPOL_BIT)) {
-        SwitchINT();
-        if (data & INTPOL_BIT) {
-            int_active_high_ = true;
-        } else {
-            int_active_high_ = false;
-        }
-    }
-
-    registers_[IOCON_ADDR] = data;
-}
-
-void ISM43362::HandleWrite() {
-
-    uint8_t dataToWrite = 0;
-    uint8_t address = 0;
-
-    // if(in_reset_mode) {
-    //     std::cout << "Error: can't write to registers while reset mode.\r\n" << std::endl;
-    // }
-
-    // Get register address
-    if (spi_slave_->Transmit(&address, nullptr, 1) == 0) {
-        return;  // CS was deactivated
-    }
-
-    /* Write registers values to the master.
-       Case of sequential mode - send the register values sequentially
-       Case of byte mode - send the same register value */
-    while (spi_slave_->Transmit(&dataToWrite, nullptr, 1) != 0) {
-        switch (address) {
-            case GPIO_ADDR:
-                WriteGPIO(dataToWrite);
-                break;
-            case IPOL_ADDR:
-                WriteIPOL(dataToWrite);
-                break;
-            case IOCON_ADDR:
-                WriteIOCON(dataToWrite);
-                break;
-            case OLAT_ADDR:
-                WriteOLAT(dataToWrite);
-                break;
-            case INTCAP_ADDR:
-                std::cout << "INTCAP register is read only register - writing INTCAP is not allowed";
-                break;
-            case INTF_ADDR:
-                std::cout << "INTF register is read only register - writing INTF is not allowed";
-                break;
-            default:
-                registers_[address] = dataToWrite;
-        }
-
-        // Increment address pointer
-        if (mode_ == sequential) {
-            address = (address + 1) % 10;
-        }
-    }
-}
-
-void ISM43362::WaitForInactiveSS() {
-    uint8_t opcode = 0;
-    while (spi_slave_->Transmit(&opcode, nullptr, 1) != 0) {}
-}
-
 
 void ISM43362::ResetWifi() {
-    uint8_t prompt[]= {0x15, 0x15, '\r','\n','>',' ', };
+    uint8_t prompt[] = {0x15, 0x15, '\r','\n','>',' ', };
     uint8_t opcode = 0;
     
     while (!should_stop_) {
@@ -414,69 +79,219 @@ void ISM43362::ResetWifi() {
 
         spi_slave_->Transmit(nullptr, prompt, sizeof(prompt));
         SetPinLevel(GetPinNumber("EXTI1"), 0);
+
         spi_slave_->Transmit(nullptr, &opcode,1);
-        SetPinLevel(GetPinNumber("EXTI1"), 1);
+        SetPinLevel(GetPinNumber("EXTI1"), 1); //ready to receive
 
         return;
     }
 }
 
-void ISM43362::Write(const std::string& command) {
-    spi_slave_->Transmit(nullptr, (uint8_t *)command.c_str() ,command.size());
+void ISM43362::SpiWrite(const std::string& data) {
+//    std::cout << "SpiWrite: " << data << std::endl;
+    SpiWrite((uint8_t *)data.c_str(), data.size());
 }
 
-void ISM43362::HandleAtCommand() {
-    if(buffer_ == "I") {
-        
+void ISM43362::SpiWrite(uint8_t* buf, int size) {
+//    std::cout << "SpiWrite: " << buf << std::endl;
+    // aligment
+    if( size % 2 == 1) {
+        buf[size] = 21;
+        size++;
     }
+
+    SetPinLevel(GetPinNumber("EXTI1"), 1);
+    spi_slave_->Transmit(nullptr, buf, size);
+    SetPinLevel(GetPinNumber("EXTI1"), 0);
+}
+
+void ISM43362::OnRecv() {
+    uint8_t rec_buf[4096] = {0};
+    memcpy(rec_buf, "\r\n", 2);
+    int size = TcpSocketRecv(id_2_socket_data_[current_id_].socket_fd, rec_buf + 2, 4086);
+
+    if (size == -1) {
+        SpiWriteCommandAndOk("");
+        return;
+    }
+    // else if (size < 0) {
+    //     SpiWriteCommandAndOk("");
+    //     return;
+    // }
+    // cout << std::string((char*)rec_buf + 2, size) << std::endl;
+
+    memcpy(rec_buf + 2 + size, "\r\nOK\r\n> ", 8);
+    
+    SpiWrite(rec_buf, size + 10);
+}
+
+void ISM43362::OnSend(AtCommand& at_command, uint8_t* buf, int size) {
+    int right = std::stoi(at_command.right_);  
+    int sent_bytes = TcpSocketSend(id_2_socket_data_[current_id_].socket_fd, buf + size - right, right);
+    SPI_WRITE_OK_INT(sent_bytes);
+}
+
+void ISM43362::OnDNSResolve(AtCommand& at_command, uint8_t* buf, int size) {
+    char ip_string[50] = {0};
+    struct in_addr ip;
+    if (!DnsResolve(at_command.right_.c_str(), &ip)) {
+//        std::cout << "Error: hostname could not be resolved" << std::endl;
+        SPI_WRITE_ERROR;
+        return;
+    }
+
+    strcpy(ip_string, inet_ntoa(ip));
+    SpiWriteCommandAndOk(ip_string);
+}
+
+vector<string> split(const string& str, const string& delim) {
+    vector<string> tokens;
+    size_t prev = 0, pos = 0;
+    do
+    {
+        pos = str.find(delim, prev);
+        if (pos == string::npos) pos = str.length();
+        string token = str.substr(prev, pos-prev);
+        if (!token.empty()) tokens.push_back(token);
+        prev = pos + delim.length();
+    }
+    while (pos < str.length() && prev < str.length());
+    return tokens;
+}
+
+void ISM43362::OnSslCert(AtCommand& at_command, uint8_t* buf, int size) {
+    char* pCert = strchr((char*) buf, '\r');
+    size = stoi(split(at_command.right_, ",")[2]);
+    int index = stoi(split(at_command.right_, ",")[1]);
+    int certificate = stoi(split(at_command.right_, ",")[0]);
+
+    switch(index) {
+        case 0: {
+            ssl_certificates_[certificate - 1].ca_cert = std::string(pCert + 1, size);
+            break;
+        }
+        case 1: {
+            ssl_certificates_[certificate - 1].client_cert = std::string(pCert + 1, size);
+            break;
+        }
+        case 2: {
+            ssl_certificates_[certificate - 1].client_key = std::string(pCert + 1, size);
+            break;
+        }
+    }
+
+    SPI_WRITE_OK;
+}
+
+void ISM43362::HandleAtCommand(uint8_t* buf, int size) {
+    AtCommand at_command = AtCommand(buf, size);
+//    std::cout << "Command: " << at_command.full_command_ << std::endl;
+
+    if (at_command.left_ == "I?") {
+        SpiWriteCommandAndOk("ISM43362-M3G-L44-SPI,C3.5.2.5.STM,v3.5.2,v1.4.0.rc1,v8.2.1,120000000,Inventek eS-WiFi");
+    } else if (at_command.left_ == "CS") {
+        SPI_WRITE_OK_INT(0);
+    } else if (at_command.left_ == "C1") {
+        ap_ = at_command.right_;
+        SPI_WRITE_OK; // C1=hello
+    } else if (at_command.left_ == "C2") {
+        password_ = at_command.right_;
+        SPI_WRITE_OK; // C2=Bello123
+    } else if (at_command.left_ == "C3") {
+        SPI_WRITE_OK; // C3=3
+    } else if (at_command.left_ == "C0") {
+        SPI_WRITE_OK;
+    } else if (at_command.left_ == "C?") {
+        SpiWriteCommandAndOk(ap_ + "," + password_ + ",3,1,0,192.168.1.12,255.255.255.0,192.168.1.1,192.168.1.1,192.168.1.1,3,0,0,US,1");
+    } else if (at_command.left_ == "D0") {
+        OnDNSResolve(at_command, buf, size);
+    } else if (at_command.left_ == "PF") {
+        current_ssl_certificate = stoi(split(at_command.right_, ",")[1]) - 1;
+        SPI_WRITE_OK; // "PF=0,3"
+    } else if (at_command.left_ == "PG") {
+        OnSslCert(at_command, buf, size);//"PG=3,0,1733"
+    } else if (at_command.left_ == "P0") {
+        current_id_ = stoi(at_command.right_);
+        SPI_WRITE_OK;
+    } else if (at_command.left_ == "P3") {
+        id_2_socket_data_[current_id_].addr.sin_family = AF_INET;
+        inet_pton(AF_INET, at_command.right_.c_str(), &(id_2_socket_data_[current_id_].addr.sin_addr));
+        SPI_WRITE_OK;
+    } else if (at_command.left_ == "P4") {
+        id_2_socket_data_[current_id_].addr.sin_port = htons(stoi(at_command.right_));
+        SPI_WRITE_OK;
+    } else if (at_command.left_ == "P6") {
+        bool result;
+        if (at_command.right_[0] == '0') {
+            result = SocketClose(id_2_socket_data_[current_id_].socket_fd);
+        } else {
+            SocketData &socket_data = id_2_socket_data_[current_id_];
+            id_2_socket_data_[current_id_].socket_fd = TcpSocketCreate();
+            SetSocketRecvTimeout(id_2_socket_data_[current_id_].socket_fd, 5, 0);
+            SetSocketSendTimeout(id_2_socket_data_[current_id_].socket_fd, 5, 0);
+            bool is_ssl = (current_ssl_certificate != -1);
+            if (is_ssl) {
+                result = TcpSocketConnect(
+                        socket_data.socket_fd,
+                        &socket_data.addr,
+                        true,
+                        ssl_certificates_[current_ssl_certificate].ca_cert,
+                        ssl_certificates_[current_ssl_certificate].client_cert,
+                        ssl_certificates_[current_ssl_certificate].client_key);
+            } else {
+                result = TcpSocketConnect(socket_data.socket_fd, &socket_data.addr, false, "", "", "");
+            }
+        }
+        if (result == 0) {
+            SPI_WRITE_OK;
+        } else {
+            SPI_WRITE_ERROR;
+        }
+    } else if (at_command.left_ == "S2") {
+        int ms = stoi(at_command.right_);
+        SetSocketSendTimeout(id_2_socket_data_[current_id_].socket_fd, ms  / 1000, (ms * 1000) % 1000000);
+        SPI_WRITE_OK; // timeout == 1
+    } else if (at_command.left_ == "S3") {
+        OnSend(at_command, buf, size);
+    } else if (at_command.left_ == "R2") {
+        int ms = stoi(at_command.right_);
+        SetSocketRecvTimeout(id_2_socket_data_[current_id_].socket_fd, ms  / 1000, (ms * 1000) % 1000000);
+        SPI_WRITE_OK; // timeout == 1
+    } else if (at_command.left_ == "R0") {
+        OnRecv();
+    } else {
+        SPI_WRITE_OK;
+    }
+
+    // std::map<std::string, std::function<void(AtCommand&, uint8_t* , int)>> at_command_2_function_;
+
+    // at_command_2_function_["S3"] = std::bind([&]() { OnSend(at_command, buf, size);});
+    // at_command_2_function_["R0"] = std::bind([&]() {OnRecv(); }
+
+    // auto it = at_command_2_function_.find(at_command.left_);
+    // if(it == at_command_2_function_.end()){
+    //     SPI_WRITE_OK;
+    //     return;
+    // }
+
+    // it->second(at_command, buf, size);
 }
 
 void ISM43362::Main() {
-
-    uint8_t at_command = 0;
+    uint8_t buffer[4096];
 
     ResetWifi();
 
     while (!should_stop_) {
+        int read = spi_slave_->Transmit(buffer, nullptr , 4096);
 
-        buffer_ += spi_slave_->Transmit(&at_command, nullptr ,1);
-
-        HandleAtCommand();
-        
-        continue;
-
-
-        // uint8_t hardware_addr = 0;
-        // uint8_t byte_received = spi_slave_->Transmit(&opcode, nullptr, 1);
-        // if (byte_received == 0) {
-        //     continue;
-        // }
-        
-
-        // uint8_t opcode_prefix = opcode >> 3; // opcode prefix is 5 first bits in the opcode
-    
-        // // Opcode must start with fixed prefix
-        // if (opcode_prefix != OPCODE_PREFIX) {
-        //     continue;
-        // }
-    
-        // // A0 & A1 bits - bits 1 & 2 - defines the hardware address
-        // hardware_addr = ((opcode >> 1) & 0x03);
-
-        // // If hardware address is enabled - the command address must be equal to the device address
-        //     // Read command - bit indexed 0 has value 1
-        // if (opcode & READ_COMMAND) {
-        //     HandleRead();
-        // } else {
-        //     HandleWrite();
-        // }
-
-        
-
-
-        // Write command - bit indexed 0 has value 0
-        // WaitForInactiveSS();
-        // }
+        if (read) {
+            SetPinLevel(GetPinNumber("EXTI1"), 0);
+            HandleAtCommand(buffer, read );
+        }
+        else {
+            SetPinLevel(GetPinNumber("EXTI1"), 1); //ready to receive
+        }
     }
 }
 
@@ -487,8 +302,8 @@ void ISM43362::Stop() {
 // Reset all registers of ISM43362
 // All regs reset values are zero except IODIR register, which should be 0xFF
 void ISM43362::Reset() {
-   std::fill(registers_, registers_ + MCP_REGS, 0);
-   registers_[IODIR_ADDR] = 0XFF;
+//    std::fill(registers_, registers_ + MCP_REGS, 0);
+//    registers_[IODIR_ADDR] = 0XFF;
 
-//   WriteGPIO(0); // For reset output pin levels
+//   SpiWriteGPIO(0); // For reset output pin levels
 }

@@ -32,7 +32,19 @@ class iJemuV2 : public iJemuV1 {
 
 class iJemuV3 : public iJemuV2 {
   public:
+
     virtual iShort* CreateShort() = 0;
+    virtual iWifiManager* CreateWifiManager() = 0;
+    virtual bool HasDataGenerator(const char* name) = 0;
+    virtual iUartDevice* CreateUartDevice(UartConfig &uartConfig) = 0;
+    virtual int TcpSocketCreate() = 0;
+    virtual int TcpSocketConnect(int fd, const struct sockaddr_in *address, bool is_ssl, const char* ca_cert, const char* client_cert, const char* client_key) = 0;
+    virtual int TcpSocketRecv(int fd, void* buffer, size_t size) = 0;
+    virtual int TcpSocketSend(int fd, void* buffer, size_t size) = 0;
+    virtual bool DnsResolve(const char* hostname, struct in_addr *ip) = 0;
+    virtual int SocketClose(int fd) = 0;
+    virtual void SetSocketSendTimeout(int fd, int s, int us) = 0;
+    virtual void SetSocketRecvTimeout(int fd, int s, int us) = 0;
 };
 
 typedef iJemuV3 iJemuInterface;

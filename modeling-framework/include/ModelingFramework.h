@@ -1,10 +1,13 @@
 #pragma once
 #include <string>
 #include <functional>
-#include "json.hpp"
+#include <netinet/in.h>
 #include "iSpiSlave.h"
 #include "iI2cSlave.h"
+#include "iUARTDevice.h"
+#include "iWifiManager.h"
 #include "iShort.h"
+#include "json.hpp"
 #include "WireManagerTypes.h"
 
 #ifdef _WINDOWS
@@ -28,6 +31,13 @@ int GetPinNumber(const std::string &pin_name);
 iSpiSlave* CreateSpiSlave(SpiSlaveConfig &spi_config);
 
 /**
+  * This function returns an instance of UART device
+  * @param uart_config that configure the uart device
+  * @return Uart device
+*/
+iUartDevice* CreateUartDevice(UartConfig &uart_config);
+
+/**
   * This function returns an instance of I2C slave
   * @return I2C slave
 */
@@ -38,6 +48,13 @@ iI2cSlave* CreateI2cSlave();
   * @return Short
 */
 iShort* CreateShort();
+
+
+/**
+  * This function returns an instance of WifiManager
+  * @return WifiManager
+*/
+iWifiManager* CreateWifiManager();
 
 /**
  * This function returns the current level of a given pin name
@@ -128,6 +145,13 @@ uint8_t GetNextUInt8FromDataGenerator(std::string name);
 double GetCachedValueFromDataGenerator(std::string name);
 
 /**
+ * This function returns true if the configuration file includes a data generator with a given data generator name
+ * @param name data generator name, to read from
+ * @return returns true if the configuration file includes a data generator with a given data generator name
+ */
+bool HasDataGenerator(std::string name);
+
+/**
  * This function sets multiple pins levels
  * @param pin_changes vector of pin change
  */
@@ -156,6 +180,23 @@ int SetPinChangeLevelEventCallback(uint32_t pin_id, const pin_change_level_callb
  * @return callback id
  */
 int SetPinChangeLevelEventCallback(const std::string &pin_name, const pin_change_level_callback_t &callback);
+
+int TcpSocketCreate();
+
+int TcpSocketConnect(int fd, const sockaddr_in *address, bool is_ssl, std::string ca_cert,
+        std::string client_cert, std::string client_key);
+
+int TcpSocketRecv(int fd, void* buffer, size_t size);
+
+int TcpSocketSend(int fd, void* buffer, size_t size);
+
+bool DnsResolve(const char* hostname, struct in_addr *ip);
+
+int SocketClose(int fd);
+
+void SetSocketSendTimeout(int fd, int s, int us);
+
+void SetSocketRecvTimeout(int fd, int s, int us);
 
 class ExternalPeripheral {
   public:
