@@ -3,8 +3,7 @@ RM=rm
 
 peripheral_name = ISM43362
 
-CFLAGS = -g -ggdb -std=c++11 -Werror -Wall -Wfatal-errors -Wno-shift-count-overflow -Weffc++ -Wno-non-virtual-dtor -Wno-strict-aliasing -Wno-unused-private-field -O3
-
+CFLAGS = -Werror -Wall -Wfatal-errors -Wno-shift-count-overflow -Weffc++ -Wno-non-virtual-dtor -Wno-strict-aliasing -Wno-unused-private-field -g -fPIC -std=gnu++1z
 $(shell mkdir -p _build)
 
 all: _build/$(peripheral_name).so
