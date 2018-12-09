@@ -14,7 +14,7 @@ typedef enum {
     DIRECTION_IN = 0,
     DIRECTION_OUT = 1,
     DIRECTION_ALTERNATE_FUNCTION = 2,
-    UNDEFINED = 3
+    DIRECTION_UNDEFINED = 3
 } pin_direction_t;
 
 typedef enum {

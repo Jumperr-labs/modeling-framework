@@ -138,6 +138,14 @@ int16_t GetNextInt16FromDataGenerator(std::string name);
 uint8_t GetNextUInt8FromDataGenerator(std::string name);
 
 /**
+ * This function returns next string value from a given data generator name.
+ * Next string is defined until space or end of line
+ * @param name data generator name, to read from
+ * @return the value that was read from data generator
+ */
+std::string GetNextStringFromDataGenerator(std::string name);
+
+/**
  * This function returns the last double value that was read from a given data generator name
  * @param name data generator name, to read from
  * @return the value that was cached from data generator
@@ -202,7 +210,10 @@ class ExternalPeripheral {
   public:
     virtual void Main() = 0;
     virtual void Stop() = 0;
-    virtual nlohmann::json DoCommand(const nlohmann::json &command) { return {}; };
+    virtual nlohmann::json DoCommand(const nlohmann::json &command) {
+        nlohmann::json json_message =
+                {{"description", "empty-msg"}};
+        return json_message; };
 };
 
 typedef ExternalPeripheral* peripheral_factory_t();

@@ -45,6 +45,14 @@ class iJemuV3 : public iJemuV2 {
     virtual int SocketClose(int fd) = 0;
     virtual void SetSocketSendTimeout(int fd, int s, int us) = 0;
     virtual void SetSocketRecvTimeout(int fd, int s, int us) = 0;
+
 };
 
-typedef iJemuV3 iJemuInterface;
+class iJemuV4 : public iJemuV3 {
+
+  public:
+    virtual std::string GetNextStringFromDataGenerator(const char* name) = 0;
+    virtual std::string GetCachedValueStrFromDataGenerator(const char *name) = 0;
+};
+
+typedef iJemuV4 iJemuInterface;

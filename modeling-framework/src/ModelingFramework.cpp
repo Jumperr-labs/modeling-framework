@@ -81,6 +81,11 @@ int16_t GetNextInt16FromDataGenerator(std::string name) {
     return jemu_interface_->GetNextInt16FromDataGenerator(name.c_str());
 }
 
+std::string GetNextStringFromDataGenerator(std::string name) {
+    assert(jemu_interface_);
+    return jemu_interface_->GetNextStringFromDataGenerator(name.c_str());
+}
+
 uint8_t GetNextUInt8FromDataGenerator(std::string name) {
     assert(jemu_interface_);
     return jemu_interface_->GetNextUInt8FromDataGenerator(name.c_str());
