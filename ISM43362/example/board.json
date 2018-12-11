@@ -20,9 +20,7 @@
 					"si": "C12",
 					"RESET": "E8",
 					"EXTI1": "E1",
-					"WAKEUP": "B13",
-					"UART3_TX": "D8",
-                    "UART3_RX": "D9"
+					"WAKEUP": "B13"
 				}
 			}
 		}
